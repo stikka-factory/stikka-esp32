@@ -4,6 +4,8 @@
 
 #include <cstring>
 
+#include <esp_log.h>
+
 bool debugOutputEnabled = true;
 String pendingLogLine;
 LogLevel pendingLogLevel = LogLevel::LOG_DEBUG;
@@ -11,6 +13,9 @@ LineCapture lineCapture(&pendingLogLine);
 
 static bool debugUsbActive = false;
 static Print* debugOut = nullptr;
+// True while the AT config mode owns the serial port: nothing but the AT
+// dialogue may be written to it (see logSerialAcquireForAt()).
+static bool serialSuppressed = false;
 
 // Fixed-size line storage (matching shortenForLog()'s own truncation length)
 // instead of String: 120 entries reassigned forever at runtime would mean a
@@ -43,6 +48,18 @@ static void pushLogEntry(LogLevel level, const String& line) {
   e.line[n] = '\0';
   logBufferNext = (logBufferNext + 1) % LOG_BUFFER_CAPACITY;
   if (logBufferCount < LOG_BUFFER_CAPACITY) logBufferCount++;
+}
+
+uint32_t logLatestSeq() { return logSeqCounter; }
+
+size_t logRecentEntries(LogView* out, size_t maxN) {
+  const size_t n = logBufferCount < maxN ? logBufferCount : maxN;
+  const size_t startIdx = (logBufferNext + LOG_BUFFER_CAPACITY - n) % LOG_BUFFER_CAPACITY;
+  for (size_t i = 0; i < n; i++) {
+    const LogEntry& e = logBuffer[(startIdx + i) % LOG_BUFFER_CAPACITY];
+    out[i] = {e.level, e.line};
+  }
+  return n;
 }
 
 void logBufferClear() {
@@ -131,6 +148,9 @@ static void stopDebugTransport() {
 // which printer method is runtime-selected.
 void applyDebugOutputSetting(bool enabled) {
   debugOutputEnabled = enabled;
+  // Web UI saves call this too; while AT mode is active just remember the
+  // setting -- it takes effect when AT mode is left.
+  if (serialSuppressed) return;
   stopDebugTransport();
   if (!debugOutputEnabled) return;
 
@@ -142,7 +162,10 @@ void applyDebugOutputSetting(bool enabled) {
 }
 
 void logSerialAcquireForAt() {
+  serialSuppressed = true;
   debugOut = nullptr;
+  // The Arduino core's own log_e()/log_w() output bypasses debugOut.
+  esp_log_level_set("*", ESP_LOG_NONE);
   if (!debugUsbActive) {
     Serial.begin(115200);
     delay(50);
@@ -151,6 +174,8 @@ void logSerialAcquireForAt() {
 }
 
 void logSerialRelease() {
+  serialSuppressed = false;
+  esp_log_level_set("*", ESP_LOG_WARN);  // matches CORE_DEBUG_LEVEL=2
   applyDebugOutputSetting(cfg.debugOutput);
 }
 

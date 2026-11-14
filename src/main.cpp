@@ -3,6 +3,7 @@
 #include "config.h"
 #include "logging.h"
 #include "at_interface.h"
+#include "bling.h"
 #include "bridge.h"
 #include "status_led.h"
 #include "targets/target.h"
@@ -30,6 +31,7 @@ void setup() {
   wifiManagerSetup();
   webUiSetup();
   atInterfaceSetup();
+  blingSetup();
   dbgPrintln("[boot] web UI ready", LogLevel::LOG_INFO);
   printNetworkState("startup");
 }
@@ -38,6 +40,7 @@ void loop() {
   wifiManagerLoop();
   webUiLoop();
   atInterfaceLoop();
+  blingLoop();
   bridgeLoop();
   targetLoop();
   updateStatusLed(wifiIsConnected(), bridgeIsConnected());

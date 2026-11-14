@@ -46,6 +46,17 @@ void dbgPrintHeadTail(const String& s, size_t n = 300);
 // Serializes ring-buffer entries newer than sinceSeq (up to `limit`) as the
 // JSON payload the web Logs tab's poll() expects -- see logEntriesToJson()
 // in logging.cpp for the paging rationale.
+// Read-only view of the newest log entries for on-device displays. `line`
+// points into the ring buffer and is only valid until the next log call
+// (single-threaded Arduino loop, so fine for an immediate render).
+struct LogView {
+  LogLevel level;
+  const char* line;
+};
+uint32_t logLatestSeq();
+// Fills `out` with up to maxN newest entries, oldest first. Returns the count.
+size_t logRecentEntries(LogView* out, size_t maxN);
+
 String logEntriesToJson(uint32_t sinceSeq, size_t limit = 40);
 void logBufferClear();
 
