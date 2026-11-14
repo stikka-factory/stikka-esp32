@@ -43,6 +43,7 @@ void loadConfig() {
   cfg.serverNodeSecret = prefs.getString("srvSecret", "");
   cfg.serverWsUrl = prefs.getString("srvWsUrl", "");
   cfg.statusIntervalSec = prefs.getUShort("statInt", 30);
+  cfg.webUiEnabled = prefs.getBool("webUi", true);
   cfg.printerName = prefs.getString("printer", "stikka-esp32");
   cfg.adminPassword = prefs.getString("adminPwd", "");
   cfg.location = prefs.getString("location", "");
@@ -91,6 +92,7 @@ void saveConfig() {
   prefs.putString("srvSecret", cfg.serverNodeSecret);
   prefs.putString("srvWsUrl", cfg.serverWsUrl);
   prefs.putUShort("statInt", cfg.statusIntervalSec);
+  prefs.putBool("webUi", cfg.webUiEnabled);
   prefs.putString("printer", cfg.printerName);
   prefs.putString("adminPwd", cfg.adminPassword);
   prefs.putString("location", cfg.location);

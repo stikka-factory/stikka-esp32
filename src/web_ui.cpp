@@ -81,6 +81,8 @@ static uint16_t parsePort(const String& value, uint16_t fallback) {
 // printer-class scan. If that path turns out not to match real Seiko
 // hardware, expect to be back in usb_host_target.cpp's descriptor walk, not
 // here.
+static bool webUiServerRunning = false;
+
 struct PrinterTypeOption {
   const char* value;     // posted <select> value, "<protocol>_<method>"
   const char* protocol;  // -> cfg.printerProtocol
@@ -101,7 +103,7 @@ static const size_t kPrinterTypeOptionCount = sizeof(kPrinterTypeOptions) / size
 // empty/missing field (fresh device) or a stale value from before this
 // dropdown was narrowed down (a device previously configured for serial or
 // seiko), so callers can fall back to their own default.
-static bool printerTypeFromValue(const String& value, String& protocolOut, String& methodOut) {
+bool printerTypeFromValue(const String& value, String& protocolOut, String& methodOut) {
   for (size_t i = 0; i < kPrinterTypeOptionCount; i++) {
     if (value == kPrinterTypeOptions[i].value) {
       protocolOut = kPrinterTypeOptions[i].protocol;
@@ -963,6 +965,19 @@ static void handleWifiForget() {
   web.send(302, "text/plain", "");
 }
 
+size_t printerTypeCount() { return kPrinterTypeOptionCount; }
+const char* printerTypeValueAt(size_t i) { return i < kPrinterTypeOptionCount ? kPrinterTypeOptions[i].value : ""; }
+
+void webUiSetEnabled(bool enabled) {
+  if (enabled == webUiServerRunning) return;
+  if (enabled) {
+    web.begin();
+  } else {
+    web.stop();
+  }
+  webUiServerRunning = enabled;
+}
+
 void webUiSetup() {
   web.on("/", HTTP_GET, guarded(handleRoot));
   web.on("/generate_204", HTTP_GET, handleCaptivePortalRedirect);
@@ -988,9 +1003,12 @@ void webUiSetup() {
   web.on("/logs/clear", HTTP_POST, guarded(handleLogsClear));
   web.on("/test", HTTP_POST, guarded(handleTest));
   web.onNotFound(handleCaptivePortalRedirect);
-  web.begin();
+  if (cfg.webUiEnabled) {
+    web.begin();
+    webUiServerRunning = true;
+  }
 }
 
 void webUiLoop() {
-  web.handleClient();
+  if (webUiServerRunning) web.handleClient();
 }

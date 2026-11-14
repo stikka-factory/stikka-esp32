@@ -32,6 +32,12 @@ extern LogLevel pendingLogLevel;
 extern LineCapture lineCapture;
 
 void applyDebugOutputSetting(bool enabled);
+
+// AT config mode owns the serial port: silences log output on it (logs still
+// go to the ring buffer / web Logs tab) and makes sure Serial is open even if
+// debug output is disabled. Release restores cfg.debugOutput behavior.
+void logSerialAcquireForAt();
+void logSerialRelease();
 void flushPendingLogLine();
 String shortenForLog(const String& text, size_t maxLen = 160);
 void dbgPrintHeadTailBytes(const uint8_t* data, size_t len, size_t n = 300);

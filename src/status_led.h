@@ -17,6 +17,9 @@ void setupStatusLed();
 // markLedEvent(rx)), cyan=TX (recent markLedEvent(tx)).
 void updateStatusLed(bool wifiConnected, bool serverConnected);
 
+// Config mode (AT interface over serial) shows a blinking blue LED.
+void setStatusLedConfigMode(bool enabled);
+
 // Flags a brief RX/TX event so updateStatusLed() shows it (purple/cyan)
 // instead of the steady-state color for the next couple of blink cycles.
 void markLedEvent(LedEventType eventType);

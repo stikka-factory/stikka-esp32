@@ -141,6 +141,19 @@ void applyDebugOutputSetting(bool enabled) {
   dbgPrintln("[debug] serial logging enabled (UART0 / programming port)", LogLevel::LOG_INFO);
 }
 
+void logSerialAcquireForAt() {
+  debugOut = nullptr;
+  if (!debugUsbActive) {
+    Serial.begin(115200);
+    delay(50);
+    debugUsbActive = true;
+  }
+}
+
+void logSerialRelease() {
+  applyDebugOutputSetting(cfg.debugOutput);
+}
+
 // Printing tens of KB in one blocking println() can starve the WiFi
 // background tasks long enough to trip the watchdog, and most serial
 // monitors truncate output that long anyway. Head+tail is enough to confirm

@@ -188,6 +188,9 @@ void markLedEvent(LedEventType eventType) {
   ledEventUntilMs = now + (holdMs < 300 ? 300 : holdMs);
 }
 
+static bool ledConfigMode = false;
+void setStatusLedConfigMode(bool enabled) { ledConfigMode = enabled; }
+
 void updateStatusLed(bool wifiConnected, bool serverConnected) {
   if (!ledConfigured) return;
   const unsigned long now = millis();
@@ -206,6 +209,11 @@ void updateStatusLed(bool wifiConnected, bool serverConnected) {
 
   if (!ledBlinkOn) {
     setLedColor({0, 0, 0});
+    return;
+  }
+
+  if (ledConfigMode) {
+    setLedColor({0, 0, 255});  // blue: AT config mode
     return;
   }
 

@@ -51,6 +51,8 @@ struct AppConfig {
   String serverNodeSecret;
   String serverWsUrl;
   uint16_t statusIntervalSec = 30;
+  // Web UI on/off (AT+webui enable|disable over serial, see at_interface.cpp).
+  bool webUiEnabled = true;
   // HTTP Basic auth password for the web UI (user "admin"). Empty = no
   // protection (fresh device, so first-boot setup works without credentials).
   String adminPassword;

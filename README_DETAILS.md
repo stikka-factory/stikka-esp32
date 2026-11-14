@@ -335,3 +335,28 @@ reboot, it isn't persisted to flash).
 - Because the ring buffer is populated independently of the serial/UART
   toggle's enabled state, the Logs tab works even with serial output turned
   off -- useful once a device is deployed without a serial cable attached.
+
+## Serial AT configuration interface
+
+Hold the **BOOT** button for 10 seconds after the node has booted to enter
+config mode (the LED blinks blue). Connect a terminal to the UART0 /
+programming port at 115200 baud (line ending CR or LF). Log output is
+silenced on the port while config mode is active.
+
+Syntax: `AT+<command> [value]`. A command without a value shows the current
+setting; `""` clears a text value. Changes are saved and applied immediately.
+
+- `AT+help` lists every command
+- `AT+status` shows all settings (passwords masked) and the link state
+- `AT+onboarding` walks through every setting one by one (Enter keeps the
+  current value, `AT+cancel` aborts) -- works on an already configured node
+- `AT+webui enable|disable` switches the web UI on or off (default on)
+- `AT+type`, `AT+loglevel`, `AT+wifi.list|forget|connect`, `AT+server.unpair`,
+  `AT+reboot`, `AT+exit`
+- one command per setting: `AT+wifi.ssid`, `AT+wifi.password`, `AT+server.url`,
+  `AT+server.code`, `AT+name`, `AT+location`, `AT+admin.password`,
+  `AT+target.host`, `AT+target.port`, `AT+dpi`, `AT+label.width`,
+  `AT+label.length`, `AT+zpl.compression`, `AT+ql.*`, `AT+seiko.*`, `AT+uart.*`,
+  `AT+status.interval`, `AT+debug`
+
+The button is read on GPIO0 (`BOOT_BUTTON_PIN`, overridable via build flag).
