@@ -8,7 +8,7 @@
 // under its own unique function names (networkTarget*/serialTarget*/
 // usbHostTarget*, declared below) -- target.cpp's dispatcher implements the
 // functions in this header by switching on cfg.printerMethod at runtime and
-// calling into whichever one is selected. mqtt_bridge.cpp and web_ui.cpp
+// calling into whichever one is selected. server_bridge.cpp and web_ui.cpp
 // call these dispatcher functions without knowing which method is active.
 
 // One-shot: build a complete buffer, then transmit it. Used by the zpl/image

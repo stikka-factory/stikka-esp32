@@ -3,7 +3,7 @@
 #include <Preferences.h>
 
 #include "logging.h"
-#include "mqtt_bridge.h"
+#include "bridge.h"
 
 AppConfig cfg;
 
@@ -37,13 +37,6 @@ void loadConfig() {
   }
   cfg.wifiSsid = prefs.getString("wifiSsid", "");
   cfg.wifiPassword = prefs.getString("wifiPwd", "");
-  cfg.mqttHost = prefs.getString("mqttHost", DEFAULT_MQTT_HOST);
-  cfg.mqttPort = prefs.getUShort("mqttPort", DEFAULT_MQTT_PORT);
-  cfg.mqttUseTls = prefs.getBool("mqttTls", DEFAULT_MQTT_USE_TLS);
-  cfg.mqttTlsInsecure = prefs.getBool("mqttInsec", DEFAULT_MQTT_TLS_INSECURE);
-  cfg.mqttCaCert = prefs.getString("mqttCa", "");
-  cfg.mqttUser = prefs.getString("mqttUser", DEFAULT_MQTT_USER);
-  cfg.mqttPassword = prefs.getString("mqttPwd", DEFAULT_MQTT_PASSWORD);
   cfg.serverUrl = prefs.getString("srvUrl", "");
   cfg.serverPairingCode = prefs.getString("srvCode", "");
   cfg.serverNodeId = prefs.getString("srvNodeId", "");
@@ -92,13 +85,6 @@ void saveConfig() {
   prefs.begin("stikka", false);
   prefs.putString("wifiSsid", cfg.wifiSsid);
   prefs.putString("wifiPwd", cfg.wifiPassword);
-  prefs.putString("mqttHost", cfg.mqttHost);
-  prefs.putUShort("mqttPort", cfg.mqttPort);
-  prefs.putBool("mqttTls", cfg.mqttUseTls);
-  prefs.putBool("mqttInsec", cfg.mqttTlsInsecure);
-  prefs.putString("mqttCa", cfg.mqttCaCert);
-  prefs.putString("mqttUser", cfg.mqttUser);
-  prefs.putString("mqttPwd", cfg.mqttPassword);
   prefs.putString("srvUrl", cfg.serverUrl);
   prefs.putString("srvCode", cfg.serverPairingCode);
   prefs.putString("srvNodeId", cfg.serverNodeId);
@@ -240,35 +226,12 @@ void printRuntimeSettings(const char* reason) {
   dbgPrint(cfg.savedWifiNetworkCount);
   dbgPrint("/");
   dbgPrintln(MAX_SAVED_WIFI_NETWORKS);
-#ifdef STIKKA_SERVER
   dbgPrint("Server: ");
   dbgPrintln(cfg.serverUrl.isEmpty() ? String("<not configured>") : cfg.serverUrl);
   dbgPrint("Node id: ");
   dbgPrintln(cfg.serverNodeId.isEmpty() ? String("<not paired>") : cfg.serverNodeId);
   dbgPrint("Pairing code pending: ");
   dbgPrintln(cfg.serverPairingCode.isEmpty() ? "no" : "yes");
-#else
-  dbgPrint("MQTT broker: ");
-  if (cfg.mqttHost.isEmpty()) {
-    dbgPrintln("<not configured>");
-  } else {
-    dbgPrint(cfg.mqttHost);
-    dbgPrint(":");
-    dbgPrintln(cfg.mqttPort);
-  }
-  dbgPrint("MQTT user: ");
-  dbgPrintln(cfg.mqttUser.isEmpty() ? String("<none>") : cfg.mqttUser);
-  dbgPrint("MQTT TLS: ");
-  dbgPrintln(cfg.mqttUseTls ? "enabled" : "disabled");
-  dbgPrint("MQTT TLS insecure: ");
-  dbgPrintln(cfg.mqttTlsInsecure ? "enabled" : "disabled");
-  dbgPrint("MQTT CA cert: ");
-  dbgPrintln(cfg.mqttCaCert.isEmpty() ? "<none>" : "configured");
-  dbgPrint("Command topic: ");
-  dbgPrintln(commandTopic());
-  dbgPrint("Status topic: ");
-  dbgPrintln(statusTopic());
-#endif
   dbgPrint("Debug output: ");
   dbgPrintln(cfg.debugOutput ? "enabled" : "disabled");
   dbgPrintln("========================================================");

@@ -1,12 +1,12 @@
-# ESP32 MQTT ZPL Bridge (MVP)
+# ESP32 Stikka Bridge
 
 This folder contains the first firmware implementation for the ESP32 bridge.
 
 Current scope:
 
-- Configure Wi-Fi, MQTT and printer settings via web UI
-- Subscribe to /<printername>/command/
-- Publish status to /<printername>/status/ (retained)
+- Configure Wi-Fi, stikka-server and printer settings via web UI
+- Enroll with a stikka-server using a one-time pairing code, keep a WebSocket
+  open and download print jobs over HTTPS (`server_bridge.cpp`)
 - Accept ZPL jobs (utf8/base64_utf8) and raw/base64
   image jobs, forwarding them to whichever transport method the active
   firmware build compiles in: a network printer host:port, a dedicated
@@ -22,19 +22,6 @@ Current scope:
   IP (see "Finding the device" below)
 - Logs tab in the web UI, with a configurable log level
 
-MQTT client: [espMqttClient](https://github.com/bertmelis/espMqttClient)
-(`mqtt_bridge.cpp`), not PubSubClient. PubSubClient reads an entire MQTT
-packet into one contiguous, pre-sized buffer before handing it to your
-callback -- that buffer's size field is a `uint16_t`, an unavoidable hard
-65535-byte ceiling per message regardless of the broker's own max packet
-size, and the whole buffer has to be reserved up front (a fallback ladder in
-`mqtt_bridge.cpp` used to try progressively smaller sizes on a fragmented
-heap). espMqttClient instead streams a PUBLISH's payload to `onMqttMessage()`
-in pieces through a small fixed ~1.4KB internal buffer regardless of the
-message's total size (`index`/`len`/`total` in the callback), which
-`mqtt_bridge.cpp` reassembles into the same JSON handling this firmware
-already had -- so there's no more library-imposed per-message ceiling.
-
 ### PSRAM (esp32-s3-devkitc-1, required)
 
 `esp32-s3-devkitc-1` (an N16R8 module -- 16MB flash + 8MB octal-SPI PSRAM,
@@ -43,7 +30,7 @@ supported board. ESP-IDF's allocator routes large mallocs/reallocs (the
 reassembled JSON `String`, then its base64-decoded twin) to external PSRAM
 automatically once it's enabled for the build, so a whole job -- ZPL text,
 an image, or a Brother QL raster stream -- fits in memory at once regardless
-of label size. Every job goes out and is processed as a single MQTT message;
+of label size. Every job goes out and is processed as a single buffer;
 there is no chunking protocol.
 
 ## Firmware source layout
@@ -55,23 +42,23 @@ there is no chunking protocol.
 - `logging.h/.cpp` -- ring-buffer logger backing the web Logs tab + serial/UART output
 - `status_led.h/.cpp` -- NeoPixel/RGB status LED
 - `wifi_manager.h/.cpp` -- station Wi-Fi connect/retry + fallback AP + captive DNS
-- `mqtt_bridge.h/.cpp` -- MQTT connect, topics, status publishing, command parsing, dispatch to a target
+- `bridge.h` / `server_bridge.cpp` -- stikka-server enrollment, WebSocket link, status reporting, job download, dispatch to a target
 - `web_ui.h/.cpp` -- config + logs web UI, adapting which fields it shows/saves to the compiled-in method and protocol
 - `targets/target.h/.cpp` -- the shared target contract (`targetSend`/`targetSendString`/`targetSetup`/`targetMethodName`) plus a write-loop helper shared by the serial/usb targets
 - `targets/network_target.cpp` -- **method="network"**: relays bytes to a TCP printer host:port (`cfg.zplTargetHost`/`zplTargetPort`). Compiled in when the active env defines `TARGET_NETWORK`
 - `targets/serial_target.cpp` -- **method="serial"**: relays bytes to a dedicated hardware UART (UART2, `cfg.printerUartTxPin`/`printerUartRxPin`/`printerUartBaud`) wired straight to the printer -- distinct from both the debug UART and the USB port. Compiled in when the active env defines `TARGET_SERIAL`
 - `targets/usb_target.cpp` -- **method="usb"**: relays bytes over the board's own USB/programming port (`Serial`/UART0, `cfg.printerUsbBaud`). Compiled in when the active env defines `TARGET_USB`. Reserves that port for print data -- serial debug output can't also use `usb` mode on this build (see "Debug output vs. the usb method" below)
 - `targets/usb_host_target.cpp` -- **method="usb_host"**: not a serial-over-cable relay like "usb" above -- the board acts as a genuine USB host, enumerating whatever's plugged into its native USB-OTG port, claiming it if it's a USB Printer-class device (bInterfaceClass 0x07), and forwarding bytes as real USB bulk transfers. Compiled in when the active env defines `TARGET_USB_HOST`. Needs a chip with USB-OTG (ESP32-S2/S3) and board circuitry that can source VBUS to the downstream printer -- confirmed via schematic for `esp32-s2-saola-1` only; `esp32-s3-devkitc-1`'s VBUS-sourcing capability is **not** confirmed, see "Brother QL over USB host" below
-- **protocol="ql"** has no dedicated target module -- the frontend builds the complete Brother QL raster byte stream client-side (`frontend/src/zpl-image.ts`) and `mqtt_bridge.cpp` forwards it byte-for-byte via the compiled-in method target, same as "zpl" (see "Brother QL raster protocol" below)
+- **protocol="ql"** has no dedicated target module -- the frontend builds the complete Brother QL raster byte stream client-side (`frontend/src/zpl-image.ts`) and `server_bridge.cpp` forwards it byte-for-byte via the compiled-in method target, same as "zpl" (see "Brother QL raster protocol" below)
 
 A target module implements the shared contract in `target.h` for one
-transport **method**; `mqtt_bridge.cpp` decodes the MQTT job (**protocol**)
+transport **method**; `server_bridge.cpp` decodes the job (**protocol**)
 and hands the resulting bytes to whichever target the active PlatformIO env
 compiles in via its `TARGET_NETWORK`/`TARGET_SERIAL`/`TARGET_USB` build flag.
 Adding a new method means adding a new `targets/*_target.cpp` implementing
 that contract, guarded by its own `TARGET_*` flag; adding a new protocol
 (e.g. a Seiko SLP command translator) means adding a new
-`targets/*_protocol.cpp` plus a `PROTOCOL_*` flag that `mqtt_bridge.cpp`
+`targets/*_protocol.cpp` plus a `PROTOCOL_*` flag that `server_bridge.cpp`
 branches on, alongside new `<board>_<protocol>_<method>` env(s) in
 `platformio.ini` -- each combination is its own firmware build, not a
 runtime option.
@@ -95,7 +82,7 @@ the real `TARGET_*`/`PROTOCOL_*` compile switches) that per-board leaf envs
 are forwarded byte-for-byte regardless of method, same as before. "ql"
 protocol builds only accept `payload_type: "ql_raster"` jobs (the frontend
 pre-rasterizes to the Brother QL raster protocol and sends the ready-to-print
-bytes) -- a `"zpl"` or `"image"` job is rejected with a clear MQTT job-status
+bytes) -- a `"zpl"` or `"image"` job is rejected with a clear job-status
 error, since this build no longer decodes any image format itself.
 
 ### Debug output vs. the `usb`/`usb_host` methods
@@ -235,7 +222,7 @@ validate against and no per-model/media database:
 QL-800/810W/820NWB. All of this is still web-UI-editable on a `PROTOCOL_QL`
 build's Config page ("Brother QL raster" box) exactly as before -- only the
 consumer changed, from firmware to the frontend (reported to it via the
-status/capabilities JSON, see "MQTT contract used by firmware" below).
+status/capabilities JSON, see the server protocol in `server_bridge.cpp`).
 
 ## Fallback AP mode
 
@@ -311,7 +298,7 @@ Output location:
    changed it -- see "Finding the device" above) once it's joined your Wi-Fi.
 2. Fill in:
 - Wi-Fi SSID and password
-- MQTT broker host/port and credentials
+- stikka-server URL and pairing code
 - Printer name
 - ZPL target host and port
 - "Printer supports compressed graphics (:Z64:/:B64:)" -- leave this off unless you've
@@ -335,7 +322,7 @@ reboot, it isn't persisted to flash).
   shows connection lifecycle and print job events; switch to `DEBUG` for full
   per-byte tracing (noisy -- meant for troubleshooting a specific
   issue, not for leaving on continuously). Changing it takes effect
-  immediately, with no Wi-Fi/MQTT reconnect (unlike the main Save button).
+  immediately, with no Wi-Fi/server reconnect (unlike the main Save button).
   Unlike the log history itself, the chosen level *is* persisted (saved with
   the rest of the config) and survives a reboot. Wi-Fi connect/disconnect
   (including the device's IP address) always shows regardless of the level
@@ -348,63 +335,3 @@ reboot, it isn't persisted to flash).
 - Because the ring buffer is populated independently of the serial/UART
   toggle's enabled state, the Logs tab works even with serial output turned
   off -- useful once a device is deployed without a serial cable attached.
-
-## MQTT contract used by firmware
-
-Subscribe:
-
-/<printername>/command/
-
-Publish retained status:
-
-/<printername>/status/
-
-Every job is a single MQTT message -- there is no chunking protocol.
-
-Command payload example:
-
-{
-  "job_id": "job-123",
-  "printer_name": "my-printer",
-  "payload_type": "zpl",
-  "payload_encoding": "utf8",
-  "payload": "^XA^FO40,40^FDHello^FS^XZ"
-}
-
-Non-`PROTOCOL_QL` builds accept `payload_type: "zpl"` (`payload_encoding:
-"utf8"` or `"base64_utf8"`) and `payload_type: "image"` (`payload_encoding:
-"data_url"` or `"base64_png"`).
-
-`PROTOCOL_QL` builds instead accept only `payload_type: "ql_raster"`, with
-`payload` holding the base64-encoded, already-rasterized Brother QL byte
-stream (`payload_encoding: "base64_bytes"`) -- see "Brother QL raster
-protocol" above.
-
-Job status payload example:
-
-{
-  "printer_name": "my-printer",
-  "job_id": "job-123",
-  "status": "accepted|done|failed",
-  "message": "..."
-}
-
-## Local mock test server (without ESP hardware)
-
-There is a software bridge simulator at:
-
-esp32/tools/mock_bridge_server.py
-
-Run it with uv:
-
-uv sync
-uv run python esp32/tools/mock_bridge_server.py --broker-host 127.0.0.1 --broker-port 1883 --printer-name stikka-test
-
-This mock server:
-
-- publishes retained printer status to /stikka-test/status/
-- subscribes to /stikka-test/command/
-- accepts ZPL and image commands
-- starts a local fake TCP printer on 127.0.0.1:9100 and prints received ZPL to console
-
-Point frontend static config to the same broker and printer name to test end-to-end.

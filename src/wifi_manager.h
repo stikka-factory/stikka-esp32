@@ -24,7 +24,7 @@ String wifiMdnsHostname();
 String sanitizeMdnsHostname(const String& raw);
 
 // Torn down explicitly (rather than left to the next wifiManagerLoop()
-// retry) when the web UI saves new Wi-Fi/MQTT settings, so the old
+// retry) when the web UI saves new Wi-Fi/server settings, so the old
 // connection doesn't linger with stale credentials.
 void wifiDisableFallbackAp();
 void wifiForceDisconnect();

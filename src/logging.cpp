@@ -14,7 +14,7 @@ static Print* debugOut = nullptr;
 
 // Fixed-size line storage (matching shortenForLog()'s own truncation length)
 // instead of String: 120 entries reassigned forever at runtime would mean a
-// continuous heap alloc/realloc cycle, exactly what this file's MQTT-buffer
+// continuous heap alloc/realloc cycle, exactly what this file's buffer
 // comments elsewhere say to avoid. A static array costs a fixed ~20KB of BSS
 // instead, which every board in platformio.ini (>=320KB SRAM) has to spare.
 static const size_t LOG_LINE_MAX = 160;
@@ -141,7 +141,7 @@ void applyDebugOutputSetting(bool enabled) {
   dbgPrintln("[debug] serial logging enabled (UART0 / programming port)", LogLevel::LOG_INFO);
 }
 
-// Printing tens of KB in one blocking println() can starve the WiFi/MQTT
+// Printing tens of KB in one blocking println() can starve the WiFi
 // background tasks long enough to trip the watchdog, and most serial
 // monitors truncate output that long anyway. Head+tail is enough to confirm
 // the body wasn't cut off (in particular, that it still ends in ^FS/^XZ).

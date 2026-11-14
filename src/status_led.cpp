@@ -135,24 +135,24 @@ void setupStatusLed() {
   dbgPrintln("[led] status LED disabled", LogLevel::LOG_INFO);
 }
 
-static RgbColor baseStatusColor(bool wifiConnected, bool mqttConnected) {
+static RgbColor baseStatusColor(bool wifiConnected, bool serverConnected) {
   if (!wifiConnected) {
     return {255, 0, 0};      // red: fallback AP / no Wi-Fi
   }
-  if (!mqttConnected) {
-    return {255, 180, 0};    // yellow: Wi-Fi yes, MQTT no
+  if (!serverConnected) {
+    return {255, 180, 0};    // yellow: Wi-Fi yes, server no
   }
-  return {0, 255, 0};        // green: Wi-Fi + MQTT
+  return {0, 255, 0};        // green: Wi-Fi + server
 }
 
-static RgbColor eventStatusColor(LedEventType evt, bool wifiConnected, bool mqttConnected) {
+static RgbColor eventStatusColor(LedEventType evt, bool wifiConnected, bool serverConnected) {
   if (evt == LedEventType::rx) {
-    return {180, 0, 255};    // purple: receiving over MQTT
+    return {180, 0, 255};    // purple: receiving from server
   }
   if (evt == LedEventType::tx) {
-    return {0, 255, 255};    // cyan: sending over MQTT
+    return {0, 255, 255};    // cyan: sending to server
   }
-  return baseStatusColor(wifiConnected, mqttConnected);
+  return baseStatusColor(wifiConnected, serverConnected);
 }
 
 static void setLedColor(const RgbColor& c) {
@@ -188,7 +188,7 @@ void markLedEvent(LedEventType eventType) {
   ledEventUntilMs = now + (holdMs < 300 ? 300 : holdMs);
 }
 
-void updateStatusLed(bool wifiConnected, bool mqttConnected) {
+void updateStatusLed(bool wifiConnected, bool serverConnected) {
   if (!ledConfigured) return;
   const unsigned long now = millis();
   const unsigned long halfBlink = (unsigned long)ledBlinkMs / 2UL;
@@ -209,5 +209,5 @@ void updateStatusLed(bool wifiConnected, bool mqttConnected) {
     return;
   }
 
-  setLedColor(eventStatusColor(activeEvent, wifiConnected, mqttConnected));
+  setLedColor(eventStatusColor(activeEvent, wifiConnected, serverConnected));
 }

@@ -2,7 +2,7 @@
 
 #include "config.h"
 #include "logging.h"
-#include "mqtt_bridge.h"
+#include "bridge.h"
 #include "status_led.h"
 #include "targets/target.h"
 #include "web_ui.h"
@@ -13,7 +13,7 @@ void setup() {
   applyDebugOutputSetting(cfg.debugOutput);
   setupStatusLed();
   targetSetup();
-  mqttBridgeSetup();
+  bridgeSetup();
   printRuntimeSettings("boot/reset");
   dbgPrintln("[boot] Stikka ESP32 bridge starting", LogLevel::LOG_INFO);
   // Confirms PSRAM actually initialized (board_build.arduino.memory_type in
@@ -35,7 +35,7 @@ void setup() {
 void loop() {
   wifiManagerLoop();
   webUiLoop();
-  mqttBridgeLoop();
+  bridgeLoop();
   targetLoop();
-  updateStatusLed(wifiIsConnected(), mqttIsConnected());
+  updateStatusLed(wifiIsConnected(), bridgeIsConnected());
 }

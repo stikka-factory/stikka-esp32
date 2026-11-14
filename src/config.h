@@ -3,28 +3,10 @@
 #include <Arduino.h>
 
 // Compile-time defaults, overridable per platformio.ini env via build_flags
-// (e.g. -D DEFAULT_MQTT_HOST='"host"'). These only take effect on first boot
+// (e.g. -D DEFAULT_DPI=300). These only take effect on first boot
 // / after an NVS erase -- loadConfig() prefers whatever's already saved in
 // Preferences, since these are meant to seed a fresh device, not override one
 // a user already configured through the web UI.
-#ifndef DEFAULT_MQTT_HOST
-#define DEFAULT_MQTT_HOST ""
-#endif
-#ifndef DEFAULT_MQTT_PORT
-#define DEFAULT_MQTT_PORT 1883
-#endif
-#ifndef DEFAULT_MQTT_USE_TLS
-#define DEFAULT_MQTT_USE_TLS true
-#endif
-#ifndef DEFAULT_MQTT_TLS_INSECURE
-#define DEFAULT_MQTT_TLS_INSECURE true
-#endif
-#ifndef DEFAULT_MQTT_USER
-#define DEFAULT_MQTT_USER ""
-#endif
-#ifndef DEFAULT_MQTT_PASSWORD
-#define DEFAULT_MQTT_PASSWORD ""
-#endif
 #ifndef DEFAULT_DPI
 #define DEFAULT_DPI 203
 #endif
@@ -60,15 +42,8 @@ struct AppConfig {
   // failover.
   WifiNetwork savedWifiNetworks[MAX_SAVED_WIFI_NETWORKS];
   int savedWifiNetworkCount = 0;
-  String mqttHost = DEFAULT_MQTT_HOST;
-  uint16_t mqttPort = DEFAULT_MQTT_PORT;
-  bool mqttUseTls = DEFAULT_MQTT_USE_TLS;
-  bool mqttTlsInsecure = DEFAULT_MQTT_TLS_INSECURE;
-  String mqttCaCert;
-  String mqttUser = DEFAULT_MQTT_USER;
-  String mqttPassword = DEFAULT_MQTT_PASSWORD;
-  // stikka-server build only (-D STIKKA_SERVER, see platformio.ini): the
-  // server base URL, a one-time pairing code (cleared once enrollment
+  // the stikka-server
+  // connection: the server base URL, a one-time pairing code (cleared once enrollment
   // succeeds or is rejected) and the credentials the server issued in return.
   String serverUrl;
   String serverPairingCode;
@@ -102,7 +77,7 @@ struct AppConfig {
   uint32_t printerUartBaud = 9600;
   // printerProtocol=="ql": Brother QL raster protocol knobs. The frontend
   // builds the whole raster byte stream client-side (frontend/src/zpl-image.ts),
-  // reading these via the status/capabilities JSON (mqtt_bridge.cpp) instead
+  // reading these via the status/capabilities JSON (server_bridge.cpp) instead
   // of a firmware-side rasterizer using them directly. Deliberately generic
   // rather than a specific-model lookup table.
   int qlPrintheadPx = 720;      // 720 = standard family, 1296 = wide family (QL-1050/1060N/11xx)
@@ -141,11 +116,11 @@ void forgetWifiNetwork(const String& ssid);
 // True once the setup wizard's minimum viable fields are in place (printer
 // brand/method chosen, station Wi-Fi entered) -- gates whether web_ui.cpp
 // serves the minimal first-boot wizard page or the full settings form.
-// Deliberately not gated on MQTT being configured, so a user can finish the
-// wizard and fill in MQTT later without being bounced back to step 1.
+// Deliberately not gated on the server being configured, so a user can finish the
+// wizard and fill in the server later without being bounced back to step 1.
 bool setupWizardComplete();
 
-// Dumps the full config + derived MQTT topics to the log at LOG_INFO,
+// Dumps the full config + derived settings to the log at LOG_INFO,
 // bracketed for readability -- called on boot and after a config save so the
 // active settings are always visible in the Logs tab / serial output.
 void printRuntimeSettings(const char* reason);

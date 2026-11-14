@@ -273,7 +273,7 @@ void usbHostTargetSetup() {
   dbgPrint("[target] usb_host: usb_host_client_register: ");
   dbgPrintln(clientErr, LogLevel::LOG_INFO);
 
-  // Baseline reading, before WiFi/MQTT/TLS are up -- isolates how much the
+  // Baseline reading, before WiFi/TLS are up -- isolates how much the
   // USB host library itself costs vs. everything else that later competes
   // with it for heap.
   dbgPrint("[target] usb_host: post-init freeHeap=");

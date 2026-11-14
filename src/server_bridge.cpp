@@ -1,6 +1,5 @@
-// stikka-server bridge: replaces mqtt_bridge.cpp when built with
-// -D STIKKA_SERVER (see the *-server env in platformio.ini). Implements the
-// same mqtt_bridge.h entry points, speaking the node protocol v1 documented
+// stikka-server bridge: implements the bridge.h entry points, speaking the
+// node protocol v1 documented
 // in stikka-server's README / src/protocol.ts:
 //
 //   1. Enroll:   POST {server}/api/node/enroll {code, chip_id, firmware}
@@ -14,8 +13,6 @@
 // Everything runs on the Arduino main thread (same non-thread-safe
 // assumption as the rest of the firmware). Job downloads block loop(), so
 // the WebSocket is pumped between chunks to keep answering server pings.
-#ifdef STIKKA_SERVER
-
 #include <ArduinoJson.h>
 #include <HTTPClient.h>
 #include <WebSocketsClient.h>
@@ -27,7 +24,7 @@
 
 #include "config.h"
 #include "logging.h"
-#include "mqtt_bridge.h"
+#include "bridge.h"
 #include "status_led.h"
 #include "targets/target.h"
 
@@ -139,7 +136,7 @@ static String bearer() { return "Bearer " + cfg.serverNodeId + "." + cfg.serverN
 
 static bool isPaired() { return !cfg.serverNodeId.isEmpty() && !cfg.serverNodeSecret.isEmpty() && !cfg.serverWsUrl.isEmpty(); }
 
-bool mqttIsConnected() { return wsUp; }
+bool bridgeIsConnected() { return wsUp; }
 
 String serverBridgeStatus() {
   if (cfg.serverUrl.isEmpty()) return "no server URL configured";
@@ -249,7 +246,7 @@ static void sendWifiScan(int count) {
   sendDoc(doc, "wifi.scan");
 }
 
-// Kept for API compatibility with the MQTT build; maps its phase strings
+// Maps the phase strings
 // onto the protocol's node states.
 void publishStatus(const char* phase, const char* lastError) {
   const String p = phase;
@@ -365,7 +362,7 @@ static void processJob(const JobOffer& job) {
   dbgPrintln("[server] job " + job.id + ": " + job.type + ", " + String((unsigned long)job.size) + " bytes", LogLevel::LOG_INFO);
   sendJobUpdate(job.id, "accepted");
 
-  // Same protocol/payload-type compatibility rules as the MQTT build.
+  // Protocol/payload-type compatibility rules.
   const bool rasterProto = cfg.printerProtocol == "ql" || cfg.printerProtocol == "seiko";
   if ((job.type == "zpl" || job.type == "image") && rasterProto)
     return failJob(job.id, "this printer only accepts pre-rasterized jobs, not " + job.type);
@@ -560,13 +557,13 @@ static void startWs() {
 
 // ───────────────────────── entry points ─────────────────────────
 
-void mqttBridgeReconnect() { statusDirty = true; }
+void bridgeReconnect() { statusDirty = true; }
 
-void mqttBridgeSetup() {
+void bridgeSetup() {
   // Everything happens lazily in the loop once Wi-Fi is up.
 }
 
-void mqttBridgeLoop() {
+void bridgeLoop() {
   if (WiFi.status() != WL_CONNECTED) {
     if (wsConfigured) stopWs();
     return;
@@ -619,4 +616,3 @@ void mqttBridgeLoop() {
   }
 }
 
-#endif  // STIKKA_SERVER

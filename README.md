@@ -1,6 +1,6 @@
 # ESP32 Stikka
 
-Firmware with WebUI used on ESP32-S3 N16R8 module to connect to Stikka-MQTT
+Firmware with WebUI used on ESP32-S3 N16R8 module to connect to a stikka-server
 
 
 ## Supported boards

@@ -7,7 +7,7 @@
 
 #include "config.h"
 #include "logging.h"
-#include "mqtt_bridge.h"
+#include "bridge.h"
 
 static DNSServer dnsServer;
 static bool dnsServerActive = false;
@@ -255,8 +255,8 @@ void printNetworkState(const char* reason) {
     dbgPrintln("Fallback AP: inactive");
   }
 
-  dbgPrint("MQTT: ");
-  dbgPrintln(mqttIsConnected() ? "connected" : "disconnected");
+  dbgPrint("Server: ");
+  dbgPrintln(bridgeIsConnected() ? "connected" : "disconnected");
   dbgPrintln("-----------------------------------------------");
   dbgPrintln();
 }
