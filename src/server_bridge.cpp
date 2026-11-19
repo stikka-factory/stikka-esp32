@@ -621,6 +621,18 @@ static void onMessage(const char* text, size_t len) {
       saveConfig();
       statusDirty = true;
     }
+    if (type == "config.set" && doc["label"].is<JsonObject>()) {
+      const int w = doc["label"]["width"] | 0;
+      const int l = doc["label"]["length"] | -1;
+      if (w >= 1 && l >= 0 && (w != cfg.labelWidth || l != cfg.labelLength)) {
+        dbgPrintln("[server] label size is now " + String(w) + "x" + String(l) + " mm", LogLevel::LOG_INFO);
+        cfg.labelWidth = w;
+        cfg.labelLength = l;
+        saveConfig();
+        statusDirty = true;
+        helloDirty = true;  // the server learns the printer's label from the hello
+      }
+    }
   } else if (type == "status.request") {
     statusDirty = true;
   } else if (type == "firmware.update") {
@@ -760,14 +772,20 @@ void bridgeLoop() {
   if (scanRunning) {
     const int n = WiFi.scanComplete();
     if (n >= 0) {
+      const int sent = n > 30 ? 30 : n;
+      dbgPrintln("[server] wifi scan found " + String(n) + " network(s), sending " + String(sent) +
+                     (n < 2 ? " -- the server needs at least 2 to locate this printer" : ""),
+                 n < 2 ? LogLevel::LOG_WARN : LogLevel::LOG_INFO);
       sendWifiScan(n);
       WiFi.scanDelete();
       scanRunning = false;
       lastScanMs = now;
     } else if (n == WIFI_SCAN_FAILED) {
+      dbgPrintln("[server] wifi scan failed", LogLevel::LOG_WARN);
       scanRunning = false;
     }
   } else if (locationIsAuto() && (scanPending || now - lastScanMs > kScanIntervalMs) && WiFi.scanComplete() != WIFI_SCAN_RUNNING) {
+    dbgPrintln("[server] scanning Wi-Fi for the server to locate this printer", LogLevel::LOG_INFO);
     WiFi.scanNetworks(true);
     scanRunning = true;
     scanPending = false;
