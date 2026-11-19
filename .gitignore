@@ -3,3 +3,6 @@
 .vscode/c_cpp_properties.json
 .vscode/launch.json
 .vscode/ipch
+
+# Local commissioning settings (may hold Wi-Fi passwords); see scripts/commission.example.ini
+scripts/config.ini

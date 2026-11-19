@@ -379,8 +379,10 @@ static String renderConfigPage() {
   html += "<small>Type: <code>" + cfg.printerProtocol + "</code> · transport: <code>";
   html += targetMethodName();
   html += "</code> (see \"Printer type\" below to change)</small>";
-  html += "<label>Details (optional)<input name='location' value='" + htmlEscape(cfg.location) + "'></label>";
-  html += "<small>Shown in the frontend next to this printer's serial number.</small>";
+  html += "<label>Details (optional)<input name='details' maxlength='100' value='" + htmlEscape(cfg.details) + "'></label>";
+  html += "<small>Free text shown in the frontend next to this printer's name.</small>";
+  html += "<label>Location<input name='location' placeholder='auto' value='" + htmlEscape(cfg.location) + "'></label>";
+  html += "<small>Coordinates only: <code>auto</code> (the server locates this printer from nearby Wi-Fi networks), <code>lat,lon</code> such as <code>47.3769,8.5417</code>, or empty for none.</small>";
   html += "</div>";
 
   html += "<div class='box'><h3>stikka-server</h3>";
@@ -770,7 +772,13 @@ static void handleSave() {
   if (cfg.statusIntervalSec < 1) cfg.statusIntervalSec = 1;
   if (cfg.statusIntervalSec > 3600) cfg.statusIntervalSec = 3600;
   cfg.printerName = web.arg("printerName"); cfg.printerName.trim();
-  cfg.location = web.arg("location");
+  cfg.details = web.arg("details"); cfg.details.trim();
+  if (cfg.details.length() > 100) cfg.details = cfg.details.substring(0, 100);
+  {
+    String loc = web.arg("location"); loc.trim();
+    if (loc.equalsIgnoreCase("auto")) loc = "auto";
+    if (locationValid(loc)) cfg.location = loc;  // invalid input keeps the previous value
+  }
   if (cfg.printerMethod == "network") {
     cfg.zplTargetHost = web.arg("zplTargetHost");
     cfg.zplTargetPort = parsePort(web.arg("zplTargetPort"), 9100);

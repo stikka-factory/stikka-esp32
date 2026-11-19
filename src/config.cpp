@@ -28,6 +28,30 @@ LogLevel logLevelFromString(const String& raw, LogLevel fallback) {
   return fallback;
 }
 
+bool locationIsAuto() { return cfg.location.equalsIgnoreCase("auto"); }
+
+bool locationParse(const String& value, double& lat, double& lon) {
+  const int comma = value.indexOf(',');
+  if (comma < 1) return false;
+  String a = value.substring(0, comma), b = value.substring(comma + 1);
+  a.trim();
+  b.trim();
+  if (a.isEmpty() || b.isEmpty()) return false;
+  char *endA = nullptr, *endB = nullptr;
+  const double la = strtod(a.c_str(), &endA);
+  const double lo = strtod(b.c_str(), &endB);
+  if (*endA != '\0' || *endB != '\0') return false;
+  if (la < -90 || la > 90 || lo < -180 || lo > 180) return false;
+  lat = la;
+  lon = lo;
+  return true;
+}
+
+bool locationValid(const String& value) {
+  double lat, lon;
+  return value.isEmpty() || value.equalsIgnoreCase("auto") || locationParse(value, lat, lon);
+}
+
 void loadConfig() {
   if (!prefs.begin("stikka", true)) {
     if (prefs.begin("stikka", false)) {
@@ -46,7 +70,18 @@ void loadConfig() {
   cfg.webUiEnabled = prefs.getBool("webUi", true);
   cfg.printerName = prefs.getString("printer", "stikka-esp32");
   cfg.adminPassword = prefs.getString("adminPwd", "");
-  cfg.location = prefs.getString("location", "");
+  // `location` used to be free text. It is now coordinates only ("auto",
+  // "<lat>,<lon>" or ""), and the free text moved to `details`: carry old
+  // values over once, and keep the old behaviour (Wi-Fi geolocation) for them.
+  cfg.details = prefs.getString("details", "");
+  cfg.location = prefs.getString("location", "auto");
+  if (!locationValid(cfg.location)) {
+    if (cfg.details.isEmpty()) cfg.details = cfg.location.substring(0, 100);
+    cfg.location = "auto";
+    prefs.putString("details", cfg.details);
+    prefs.putString("location", cfg.location);
+  prefs.putString("details", cfg.details);
+  }
   cfg.printerProtocol = prefs.getString("printProto", "");
   cfg.printerMethod = prefs.getString("printMeth", "");
   cfg.zplTargetHost = prefs.getString("zplHost", "");
@@ -174,6 +209,8 @@ void printRuntimeSettings(const char* reason) {
   dbgPrintln(cfg.printerProtocol.isEmpty() ? String("<not set -- setup wizard incomplete>") : cfg.printerProtocol);
   dbgPrint("Location: ");
   dbgPrintln(cfg.location.isEmpty() ? String("<not set>") : cfg.location);
+  dbgPrint("Details: ");
+  dbgPrintln(cfg.details.isEmpty() ? String("<not set>") : cfg.details);
   if (cfg.printerMethod == "network") {
     dbgPrint("Target (network): ");
     dbgPrint(cfg.zplTargetHost);

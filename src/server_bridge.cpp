@@ -28,8 +28,14 @@
 #include "status_led.h"
 #include "targets/target.h"
 
+#include <Update.h>
+
+// Both come from scripts/fw_version.py at build time.
 #ifndef FIRMWARE_VERSION
 #define FIRMWARE_VERSION "dev"
+#endif
+#ifndef FIRMWARE_ENV
+#define FIRMWARE_ENV ""
 #endif
 
 static const size_t kMaxPayloadBytes = 8u * 1024u * 1024u;
@@ -45,6 +51,16 @@ static unsigned long lastEnrollAttemptMs = 0;
 static String lastEnrollError;
 static unsigned long lastStatusMs = 0;
 static bool statusDirty = false;
+static bool helloDirty = false;  // re-send hello (name/details/location changed)
+
+struct FirmwareOffer {
+  String version;
+  String url;
+  String sha256;
+  size_t size = 0;
+};
+static FirmwareOffer fwOffer;
+static bool fwOfferPending = false;
 
 static String nodeState = "idle";  // idle | printing | error
 static String nodeError;           // empty = none
@@ -197,8 +213,22 @@ static void sendHello() {
   doc["name"] = cfg.printerName;
   doc["firmware"] = FIRMWARE_VERSION;
   doc["chip_id"] = chipId();
+  if (strlen(FIRMWARE_ENV) > 0) doc["firmware_env"] = FIRMWARE_ENV;
+  doc["details"] = cfg.details;
+  double lat, lon;
+  if (locationIsAuto()) {
+    doc["location_mode"] = "auto";
+  } else if (locationParse(cfg.location, lat, lon)) {
+    doc["location_mode"] = "fixed";
+    JsonObject loc = doc["location"].to<JsonObject>();
+    loc["lat"] = lat;
+    loc["lon"] = lon;
+  } else {
+    doc["location_mode"] = "off";
+  }
   fillPrinter(doc["printer"].to<JsonObject>());
   sendDoc(doc, "hello");
+  helloDirty = false;
 }
 
 static void sendStatus() {
@@ -232,6 +262,14 @@ static void sendJobUpdate(const String& jobId, const char* status, const String&
   doc["status"] = status;
   if (!message.isEmpty()) doc["message"] = message.substring(0, 500);
   sendDoc(doc, "job.update");
+}
+
+static void sendFirmwareUpdateStatus(const char* status, const String& message = "") {
+  JsonDocument doc;
+  doc["status"] = status;
+  doc["version"] = fwOffer.version;
+  if (!message.isEmpty()) doc["message"] = message.substring(0, 500);
+  sendDoc(doc, "firmware.update.status");
 }
 
 static void sendWifiScan(int count) {
@@ -458,6 +496,104 @@ static void processJob(const JobOffer& job) {
   publishStatus("ready", "");
 }
 
+// ───────────────────────── firmware update ─────────────────────────
+
+static void failFirmwareUpdate(const String& msg) {
+  dbgPrintln("[server] firmware update failed: " + msg, LogLevel::LOG_ERROR);
+  sendFirmwareUpdateStatus("failed", msg);
+}
+
+// Downloads the offered image straight into the next OTA partition, checking
+// its sha256 before the new partition is made bootable, then reboots into it.
+static void processFirmwareUpdate(const FirmwareOffer& o) {
+  dbgPrintln("[server] firmware update to " + o.version + " (" + String((unsigned long)o.size) + " bytes)", LogLevel::LOG_INFO);
+  if (o.version.isEmpty() || o.url.isEmpty() || o.size < 100000 || o.sha256.length() != 64) return failFirmwareUpdate("invalid firmware offer");
+  sendFirmwareUpdateStatus("downloading");
+
+  bool tls;
+  String host, path;
+  uint16_t port;
+  if (!parseUrl(o.url, tls, host, port, path)) return failFirmwareUpdate("invalid firmware url");
+
+  WiFiClientSecure secure;
+  WiFiClient plain;
+  HTTPClient http;
+  http.setTimeout(15000);
+  http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
+  bool began;
+  if (tls) {
+    secure.setInsecure();
+    began = http.begin(secure, o.url);
+  } else {
+    began = http.begin(plain, o.url);
+  }
+  if (!began) return failFirmwareUpdate("could not open firmware connection");
+  const int code = http.GET();
+  if (code != 200) {
+    http.end();
+    return failFirmwareUpdate("download failed: HTTP " + String(code));
+  }
+  if (!Update.begin(o.size, U_FLASH)) {
+    http.end();
+    return failFirmwareUpdate(String("not enough space for the update: ") + Update.errorString());
+  }
+
+  mbedtls_sha256_context sha;
+  mbedtls_sha256_init(&sha);
+  mbedtls_sha256_starts(&sha, 0);
+  WiFiClient* stream = http.getStreamPtr();
+  static uint8_t chunk[2048];
+  size_t got = 0;
+  unsigned long lastData = millis();
+  bool ok = true;
+  while (got < o.size && (http.connected() || stream->available())) {
+    const int avail = stream->available();
+    if (avail > 0) {
+      const size_t want = min(min((size_t)avail, sizeof(chunk)), o.size - got);
+      const int n = stream->readBytes(chunk, want);
+      if (n > 0) {
+        if (Update.write(chunk, n) != (size_t)n) { ok = false; break; }
+        mbedtls_sha256_update(&sha, chunk, n);
+        got += n;
+        lastData = millis();
+      }
+    } else {
+      if (millis() - lastData > 15000) break;
+      delay(2);
+    }
+    ws.loop();
+  }
+  http.end();
+  uint8_t digest[32];
+  mbedtls_sha256_finish(&sha, digest);
+  mbedtls_sha256_free(&sha);
+
+  if (!ok) {
+    const String why = Update.errorString();
+    Update.abort();
+    return failFirmwareUpdate("flash write failed: " + why);
+  }
+  if (got != o.size) {
+    Update.abort();
+    return failFirmwareUpdate("download incomplete (" + String((unsigned long)got) + "/" + String((unsigned long)o.size) + " bytes)");
+  }
+  if (!toHex(digest, 32).equalsIgnoreCase(o.sha256)) {
+    Update.abort();  // never made bootable
+    return failFirmwareUpdate("checksum mismatch");
+  }
+
+  sendFirmwareUpdateStatus("flashing");
+  if (!Update.end(true)) return failFirmwareUpdate("image rejected: " + String(Update.errorString()));
+  sendFirmwareUpdateStatus("rebooting");
+  for (int i = 0; i < 20; i++) {  // let the status message out
+    ws.loop();
+    delay(25);
+  }
+  dbgPrintln("[server] firmware " + o.version + " installed, rebooting", LogLevel::LOG_INFO);
+  delay(200);
+  ESP.restart();
+}
+
 // ───────────────────────── WebSocket ─────────────────────────
 
 static void onMessage(const char* text, size_t len) {
@@ -484,6 +620,12 @@ static void onMessage(const char* text, size_t len) {
     }
   } else if (type == "status.request") {
     statusDirty = true;
+  } else if (type == "firmware.update") {
+    fwOffer.version = doc["version"] | "";
+    fwOffer.url = doc["url"] | "";
+    fwOffer.sha256 = doc["sha256"] | "";
+    fwOffer.size = doc["size"] | 0;
+    fwOfferPending = true;
   } else if (type == "job.offer") {
     JobOffer o;
     o.id = doc["job_id"] | "";
@@ -557,7 +699,11 @@ static void startWs() {
 
 // ───────────────────────── entry points ─────────────────────────
 
-void bridgeReconnect() { statusDirty = true; }
+void bridgeReconnect() {
+  statusDirty = true;
+  helloDirty = true;
+  scanPending = true;  // location may just have been switched to "auto"
+}
 
 void bridgeSetup() {
   // Everything happens lazily in the loop once Wi-Fi is up.
@@ -593,6 +739,15 @@ void bridgeLoop() {
     statusDirty = true;
   }
 
+  // A firmware update waits for the job queue to drain, so it never cuts a
+  // print short; it blocks the loop while it downloads, like a job does.
+  if (fwOfferPending && jobQueueLen == 0 && nodeState != "printing") {
+    fwOfferPending = false;
+    processFirmwareUpdate(fwOffer);
+    statusDirty = true;
+  }
+  if (helloDirty) sendHello();
+
   const unsigned long now = millis();
   unsigned long intervalMs = (unsigned long)cfg.statusIntervalSec * 1000UL;
   if (intervalMs > 60000UL || intervalMs == 0) intervalMs = 60000UL;  // protocol: status at least every 60 s
@@ -609,7 +764,7 @@ void bridgeLoop() {
     } else if (n == WIFI_SCAN_FAILED) {
       scanRunning = false;
     }
-  } else if ((scanPending || now - lastScanMs > kScanIntervalMs) && WiFi.scanComplete() != WIFI_SCAN_RUNNING) {
+  } else if (locationIsAuto() && (scanPending || now - lastScanMs > kScanIntervalMs) && WiFi.scanComplete() != WIFI_SCAN_RUNNING) {
     WiFi.scanNetworks(true);
     scanRunning = true;
     scanPending = false;

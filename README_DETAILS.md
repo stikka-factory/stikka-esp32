@@ -354,9 +354,61 @@ setting; `""` clears a text value. Changes are saved and applied immediately.
 - `AT+type`, `AT+loglevel`, `AT+wifi.list|forget|connect`, `AT+server.unpair`,
   `AT+reboot`, `AT+exit`
 - one command per setting: `AT+wifi.ssid`, `AT+wifi.password`, `AT+server.url`,
-  `AT+server.code`, `AT+name`, `AT+location`, `AT+admin.password`,
+  `AT+server.code`, `AT+name`, `AT+details`, `AT+location`, `AT+admin.password`,
   `AT+target.host`, `AT+target.port`, `AT+dpi`, `AT+label.width`,
   `AT+label.length`, `AT+zpl.compression`, `AT+ql.*`, `AT+seiko.*`, `AT+uart.*`,
   `AT+status.interval`, `AT+debug`
 
 The button is read on GPIO0 (`BOOT_BUTTON_PIN`, overridable via build flag).
+
+`AT+location` is coordinates only: `auto` (default; the node sends a Wi-Fi scan
+and the server geolocates it), `<lat>,<lon>` (fixed, e.g. `47.3769,8.5417`) or
+empty (no location). Free text goes in `AT+details` and is shown next to the
+printer's name. Older firmware kept free text in `location`; it moves to
+`details` on first boot.
+
+### Scripted commissioning
+
+`scripts/commission.py` drives this interface for you (Python 3, standard
+library only, Linux/macOS): it waits for you to hold BOOT, sends the settings
+(Wi-Fi first, pairing code last), waits for the node to pair with
+stikka-server and prints the final `AT+status`.
+
+```sh
+scripts/commission.py --wifi-ssid Lab --wifi-password s3cret \
+    --server-url https://stikka.example.org --name lobby --type zpl_network \
+    --set target.host=10.0.0.5 --label-width 100 --label-length 150
+scripts/commission.py --config site.json --loop   # a batch, one node at a time
+scripts/commission.py --status                    # just show a node's settings
+```
+
+`--config` is an INI file (`[DEFAULT]` shared by all nodes, `--profile NAME`
+selects a section on top) or a JSON object of AT setting names (plus `type`);
+command-line options override it. Any setting without its own flag goes through
+`--set key=value`. The one-time pairing code is prompted for per node.
+
+
+## Versioning and updates
+
+`VERSION` holds the semantic version (`MAJOR.MINOR.PATCH`). The build appends
+build metadata, so a binary reports e.g. `1.2.0+3f9c1ab` (`.dirty` added when
+built with uncommitted changes), and `scripts/fw_version.py` (a PlatformIO
+extra script) defines `FIRMWARE_VERSION` and `FIRMWARE_ENV` (the environment
+name) for the code. Release flow:
+
+```sh
+scripts/fw_version.py --bump minor   # patch | minor | major; edits VERSION
+git commit -am "Release $(scripts/fw_version.py --core)"
+scripts/build-firmware.sh            # builds every env into ../stikka-server (or $STIKKA_SERVER_DIR)
+```
+
+`build-firmware.sh` writes the version into each `manifest.json` and names the
+default environment (`default_envs`, currently the bling build) in
+`index.json`, which the server's Add printer tab preselects.
+
+Nodes update over the air: stikka-server sends `firmware.update` (URL,
+sha256, size) and the node downloads the image into the next OTA slot,
+checks the checksum before the slot becomes bootable, reboots and reports
+the new version. Operators drive it from the server's Settings > Printers.
+There is no automatic rollback if a new image boots but misbehaves; reflash
+over USB in that case.

@@ -45,7 +45,8 @@ static const Setting kSettings[] = {
     {"server.url", Kind::Str, &cfg.serverUrl, 0, 200, false, A_SERVER, "stikka-server base URL"},
     {"server.code", Kind::Str, &cfg.serverPairingCode, 0, 32, false, A_SERVER, "one-time pairing code (pairs / re-pairs)"},
     {"name", Kind::Str, &cfg.printerName, 1, 63, false, A_NAME, "printer / node name (also the mDNS hostname)"},
-    {"location", Kind::Str, &cfg.location, 0, 100, false, A_SERVER, "free-form details shown next to the printer"},
+    {"location", Kind::Str, &cfg.location, 0, 40, false, A_SERVER, "coordinates only: auto (Wi-Fi geolocation), \"<lat>,<lon>\" or \"\" (none)"},
+    {"details", Kind::Str, &cfg.details, 0, 100, false, A_SERVER, "free-text details shown next to the printer (e.g. \"Front desk\")"},
     {"admin.password", Kind::Str, &cfg.adminPassword, 0, 64, true, 0, "web UI password, user \"admin\" (\"\" = no password)"},
     {"target.host", Kind::Str, &cfg.zplTargetHost, 0, 100, false, A_PRINTER, "network printer host (zpl_network only)"},
     {"target.port", Kind::U16, &cfg.zplTargetPort, 1, 65535, false, A_PRINTER, "network printer port (default 9100)"},
@@ -144,6 +145,11 @@ static bool setValue(const Setting& s, const String& rawArg, String& err) {
         err = String("length must be ") + s.min + ".." + s.max;
         return false;
       }
+      if (String(s.name) == "location" && !locationValid(v)) {
+        err = "expected auto, \"<lat>,<lon>\" (e.g. 47.3769,8.5417) or \"\"";
+        return false;
+      }
+      if (String(s.name) == "location" && v.equalsIgnoreCase("auto")) v = "auto";
       *(String*)s.ptr = v;
       return true;
     }
@@ -419,7 +425,7 @@ static void finishOnboarding(bool cancelled) {
 
 static void startOnboarding() {
   onboarding = true;
-  obKeys = {"wifi.ssid", "wifi.password", "server.url", "server.code", "name", "location", "type"};
+  obKeys = {"wifi.ssid", "wifi.password", "server.url", "server.code", "name", "location", "details", "type"};
   buildOnboardingTail();
   obIdx = 0;
   sayln("Onboarding: Enter keeps the current value, \"\" clears a text value, AT+cancel aborts.");

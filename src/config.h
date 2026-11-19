@@ -57,7 +57,11 @@ struct AppConfig {
   // protection (fresh device, so first-boot setup works without credentials).
   String adminPassword;
   String printerName = "stikka-esp32";
-  String location; // optional, freeform (e.g. "Front desk") -- shown in the frontend next to the serial
+  // Coordinates only: "auto" (the node scans Wi-Fi and the server geolocates
+  // it), "<lat>,<lon>" (fixed, e.g. "47.3769,8.5417") or "" (no location).
+  String location = "auto";
+  // Optional free text (e.g. "Front desk"), shown next to the printer's name.
+  String details;
   // Chosen at runtime via the web UI's first-boot setup wizard (see
   // setupWizardComplete() below and web_ui.cpp's renderWizardPage()) rather
   // than fixed by the firmware build -- empty until the wizard is completed.
@@ -101,6 +105,11 @@ struct AppConfig {
 };
 
 extern AppConfig cfg;
+
+// cfg.location helpers. A valid location is "", "auto" or "<lat>,<lon>".
+bool locationIsAuto();
+bool locationParse(const String& value, double& lat, double& lon);  // "<lat>,<lon>" only
+bool locationValid(const String& value);
 
 void loadConfig();
 void saveConfig();

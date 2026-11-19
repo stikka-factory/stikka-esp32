@@ -3,7 +3,9 @@ set -euo pipefail
 
 REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 ESP32_DIR="$REPO_ROOT"
-FRONTEND_REPO="$REPO_ROOT/../stikka-mqtt"
+# The stikka-server checkout next to this repo; its frontend serves the images
+# both to the web flasher and to nodes updating themselves over the air.
+FRONTEND_REPO="${STIKKA_SERVER_DIR:-$REPO_ROOT/../stikka-server}"
 OUT_ROOT="$FRONTEND_REPO/frontend/public/firmware"
 
 # PlatformIO installs tool Python packages into an internal --target path.
@@ -26,7 +28,7 @@ if [[ ! -f "$ESP32_DIR/platformio.ini" ]]; then
 fi
 
 if [[ ! -d "$FRONTEND_REPO" ]]; then
-  echo "error: expected sibling repo at $FRONTEND_REPO (clone stikka-mqtt next to this repo)"
+  echo "error: expected sibling repo at $FRONTEND_REPO (clone stikka-server next to this repo, or set STIKKA_SERVER_DIR)"
   exit 1
 fi
 
@@ -39,6 +41,10 @@ if [[ ${#ENVS[@]} -eq 0 ]]; then
   echo "error: no [env:<name>] entries found in $ESP32_DIR/platformio.ini"
   exit 1
 fi
+
+FW_VERSION="$(python3 "$ESP32_DIR/scripts/fw_version.py")"
+DEFAULT_ENV="$(sed -nE 's/^default_envs[[:space:]]*=[[:space:]]*([^[:space:]]+).*/\1/p' "$ESP32_DIR/platformio.ini" | head -1)"
+DEFAULT_ENV="${DEFAULT_ENV:-${ENVS[0]}}"
 
 mkdir -p "$OUT_ROOT"
 rm -rf "$OUT_ROOT"/*
@@ -124,7 +130,7 @@ for env_name in "${ENVS[@]}"; do
   cat > "$out_dir/manifest.json" <<EOF
 {
   "name": "Stikka Firmware ($env_name)",
-  "version": "$(date -u +"%Y-%m-%d")",
+  "version": "$FW_VERSION",
   "new_install_prompt_erase": true,
   "builds": [
     {
@@ -158,6 +164,8 @@ index_file="$OUT_ROOT/index.json"
   echo '{'
   echo '  "generatedAt": "'"$(date -u +"%Y-%m-%dT%H:%M:%SZ")"'",'
   echo '  "source": "stikka-firmware",'
+  echo '  "version": "'"$FW_VERSION"'",'
+  echo '  "default": "'"$DEFAULT_ENV"'",'
   echo '  "environments": ['
   for i in "${!ENVS[@]}"; do
     env_name="${ENVS[$i]}"
