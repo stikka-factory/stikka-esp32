@@ -258,25 +258,18 @@ regardless of configured log level) or your router's DHCP client list.
 
 esp32
 
-2. Select environment:
+2. Select environment (the module fitted on your board; protocol and
+connection method are chosen at runtime, not per env):
 
-env:esp32-s3-devkitc-1_zpl_network (the default -- see `[platformio]` in
-platformio.ini)
+- `esp32-s3-n16r8` -- ESP32-S3-DevKitC-1 with an N16R8 module (16MB flash, 8MB
+  octal PSRAM). The default -- see `[platformio]` in platformio.ini.
+- `esp32-s3-n8r2` -- the same with an N8R2 module (8MB flash, 2MB quad PSRAM).
 
-Envs are named `<board>_<protocol>_<method>`. `esp32-s3-devkitc-1` (PSRAM) is
-the only supported board, and only two leaf envs are currently defined in
-`platformio.ini`:
-
-- env:esp32-s3-devkitc-1_zpl_network (default)
-- env:esp32-s3-devkitc-1_ql_usb_host
-
-Add a new `[env:esp32-s3-devkitc-1_<protocol>_<method>]` leaf extending the
-matching `env_<protocol>_<method>` base (see the protocol/method matrix
-above) to build for a different combination on this board.
+Both build the "bling" firmware (GC9A01 display + NeoPixel effects).
 
 Example CLI usage:
 
-pio run -e esp32-s3-devkitc-1_zpl_network -t upload
+pio run -e esp32-s3-n16r8 -t upload
 
 To build all configured board environments and stage web-flasher artifacts, use the repo dev-shell command:
 

@@ -316,6 +316,9 @@ static void tryEnroll() {
   req["code"] = cfg.serverPairingCode;
   req["chip_id"] = chipId();
   req["firmware"] = FIRMWARE_VERSION;
+  // The server would otherwise invent a name and overwrite the one set on the
+  // node (AT+name / web UI) with it.
+  if (!cfg.printerName.isEmpty() && cfg.printerName != "stikka-esp32") req["name"] = cfg.printerName;
   String body;
   serializeJson(req, body);
 
