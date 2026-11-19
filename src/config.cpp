@@ -70,17 +70,21 @@ void loadConfig() {
   cfg.webUiEnabled = prefs.getBool("webUi", true);
   cfg.printerName = prefs.getString("printer", "stikka-esp32");
   cfg.adminPassword = prefs.getString("adminPwd", "");
-  // `location` used to be free text. It is now coordinates only ("auto",
-  // "<lat>,<lon>" or ""), and the free text moved to `details`: carry old
-  // values over once, and keep the old behaviour (Wi-Fi geolocation) for them.
-  cfg.details = prefs.getString("details", "");
-  cfg.location = prefs.getString("location", "auto");
-  if (!locationValid(cfg.location)) {
-    if (cfg.details.isEmpty()) cfg.details = cfg.location.substring(0, 100);
+  // `location` used to be free text and defaulted to "". It is now coordinates
+  // only ("auto", "<lat>,<lon>" or "" = none) and the free text lives in
+  // `details`. The absence of the `details` key marks a node that has not been
+  // migrated yet: its old location text becomes the details, and the node goes
+  // to "auto" -- those nodes always scanned Wi-Fi, so an old "" must not turn
+  // into "no location".
+  if (!prefs.isKey("details")) {
+    cfg.details = prefs.getString("location", "").substring(0, 100);
     cfg.location = "auto";
-    prefs.putString("details", cfg.details);
-    prefs.putString("location", cfg.location);
-  prefs.putString("details", cfg.details);
+    // Storage is open read-only here; the next saveConfig() persists this, and
+    // until then the migration simply repeats on every boot.
+  } else {
+    cfg.details = prefs.getString("details", "");
+    cfg.location = prefs.getString("location", "auto");
+    if (!locationValid(cfg.location)) cfg.location = "auto";
   }
   cfg.printerProtocol = prefs.getString("printProto", "");
   cfg.printerMethod = prefs.getString("printMeth", "");
@@ -131,6 +135,7 @@ void saveConfig() {
   prefs.putString("printer", cfg.printerName);
   prefs.putString("adminPwd", cfg.adminPassword);
   prefs.putString("location", cfg.location);
+  prefs.putString("details", cfg.details);
   prefs.putString("printProto", cfg.printerProtocol);
   prefs.putString("printMeth", cfg.printerMethod);
   prefs.putString("zplHost", cfg.zplTargetHost);
